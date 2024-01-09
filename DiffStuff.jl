@@ -153,10 +153,10 @@ export Variable, backward!, grad, +, -, *, /, ^, convert
 end
 
 
-module ForwardFD
+module CentralFD
 
 function gradFD(f, x, y)
-    epsilon = sqrt(eps(eltype(x)))
+    epsilon = eps(eltype(x)) ^ (1/3)
     gradsx = zero(x)
     gradsy = zero(y)
     gradsx .= (f(x .+ epsilon, y) - f(x .- epsilon, y)) / (2 * epsilon)
