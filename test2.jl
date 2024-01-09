@@ -1,7 +1,7 @@
 using Images, Plots, Printf, LinearAlgebra
 include("/home/m0e/Documents/NlOpt-Seminar-Code/DiffStuff.jl")
 using .ReverseAD: Variable, backward!, grad, +, -, *, /, ^, convert
-using .ForwardFD: gradFD
+using .CentralFD: gradFD
 
 
 function Rosenbrock(x, y; a=1, b=100)
