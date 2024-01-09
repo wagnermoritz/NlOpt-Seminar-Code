@@ -153,15 +153,33 @@ export Variable, backward!, grad, +, -, *, /, ^, convert
 end
 
 
-module CentralFD
+module FiniteDiff
 
-function gradFD(f, x, y)
-    epsilon = eps(eltype(x)) ^ (1/3)
+function centralGrad(f, x, y; epsilon=0.0)
+
+    if epsilon==0
+        epsilon = eps(eltype(x)) ^ (1/3)
+    end
+
     gradsx = zero(x)
     gradsy = zero(y)
     gradsx .= (f(x .+ epsilon, y) - f(x .- epsilon, y)) / (2 * epsilon)
     gradsy .= (f(x, y .+ epsilon) - f(x, y .- epsilon)) / (2 * epsilon)
-    return (gradsx, gradsy)
+    return gradsx, gradsy
+end
+
+
+function forwardGrad(f, x, y; epsilon=0.0)
+
+    if epsilon==0
+        epsilon = sqrt(eps(eltype(x)))
+    end
+
+    gradsx = zero(x)
+    gradsy = zero(y)
+    gradsx .= (f(x .+ epsilon, y) - f(x, y)) / epsilon
+    gradsy .= (f(x, y .+ epsilon) - f(x, y)) / epsilon
+    return gradsx, gradsy
 end
 
 export gradFD
