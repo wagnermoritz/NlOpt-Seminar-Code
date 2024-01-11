@@ -2,16 +2,8 @@ using Images, Plots, Printf, LinearAlgebra
 include("./DiffStuff.jl")
 using .ReverseAD: Variable, backward!, grad, +, -, *, /, ^, convert
 using .FiniteDiff: centralGrad, forwardGrad
+using .ComplexStep: complexGrad
 
-
-function Rosenbrock(x, y)
-    return (1 .- x) .^ 2 + 100 * (y - x .^ 2) .^ 2
-end
-
-function grad_Rosenbrock(x, y)
-    return 2 * (-1 .+ x + 200 * x .^ 3 - 200 .* x .* y),
-           200 * (-x .^ 2 + y)
-end
 
 function Himmelblau(x, y)
     return (x .^ 2 + y .- 11) .^ 2 + (x + y .^ 2 .- 7) .^ 2
@@ -23,7 +15,7 @@ function grad_Himmelblau(x, y)
 end
 
 
-function getErrors(f, grad_f, get_grad, xul, yul, arrType, epsul; resolution=100)
+function getErrorsFD(f, grad_f, get_grad, xul, yul, arrType, epsul; resolution=100)
 
     xul = convert(Vector{arrType}, xul)
     yul = convert(Vector{arrType}, yul)
@@ -33,19 +25,41 @@ function getErrors(f, grad_f, get_grad, xul, yul, arrType, epsul; resolution=100
     y = repeat(y, 1, resolution)[:]
 
     epsrange = convert(Vector{arrType}, 10.0 .^ LinRange(epsul[1], epsul[2], 1000))
-    errorsx = arrType[]
-    errorsy = arrType[]
+    errors = arrType[]
 
     for eps in epsrange
         dx, dy = get_grad(f, x, y; epsilon=eps)
         true_dx, true_dy = grad_f(x, y)
         distx = abs.(dx - true_dx)
         disty = abs.(dy - true_dy)
-        push!(errorsx, sum(distx) / (resolution ^ 2))
-        push!(errorsy, sum(disty) / (resolution ^ 2))
+        push!(errors, (sum(distx) + sum(disty)) / (2 * resolution ^ 2))
     end
 
-    return errorsx, errorsy
+    return errors
+end
+
+
+function getErrorAD(f, grad_f, xul, yul, arrType; resolution=100)
+
+    xul = convert(Vector{arrType}, xul)
+    yul = convert(Vector{arrType}, yul)
+    x = LinRange(xul[1], xul[2], resolution)
+    x = transpose(repeat(x, 1, resolution))[:]
+    y = LinRange(yul[1], yul[2], resolution)
+    y = repeat(y, 1, resolution)[:]
+
+    true_dx, true_dy = grad_f(x, y)
+
+    x = convert.(Variable, x)
+    y = convert.(Variable, y)
+    res = f(x, y)
+    backward!.(res)
+    dx = grad.(x)
+    dy = grad.(y)
+    distx = abs.(dx - true_dx)
+    disty = abs.(dy - true_dy)
+
+    return (sum(distx) + sum(disty)) / (2 * resolution ^ 2)
 end
 
 
@@ -53,42 +67,42 @@ xul = [-6.0, 6.0]# .- 0.270845
 yul = [-6.0, 6.0]# .- 0.923039
 epsul = [-16, 1]
 
-errorsx32f, errorsy32f = getErrors(Himmelblau, grad_Himmelblau, forwardGrad, xul, yul, Float32, epsul)
-errorsx64f, errorsy64f = getErrors(Himmelblau, grad_Himmelblau, forwardGrad, xul, yul, Float64, epsul)
-errorsx32c, errorsy32c = getErrors(Himmelblau, grad_Himmelblau, centralGrad, xul, yul, Float32, epsul)
-errorsx64c, errorsy64c = getErrors(Himmelblau, grad_Himmelblau, centralGrad, xul, yul, Float64, epsul)
+errors32f = getErrorsFD(Himmelblau, grad_Himmelblau, forwardGrad, xul, yul, Float32, epsul)
+errors64f = getErrorsFD(Himmelblau, grad_Himmelblau, forwardGrad, xul, yul, Float64, epsul)
+errors32c = getErrorsFD(Himmelblau, grad_Himmelblau, centralGrad, xul, yul, Float32, epsul)
+errors64c = getErrorsFD(Himmelblau, grad_Himmelblau, centralGrad, xul, yul, Float64, epsul)
 
 plot(10.0 .^ LinRange(epsul[1], epsul[2], 1000), 
-     [errorsx32f, errorsx64f, errorsx32c, errorsx64c],
-     xlabel="epsilon", ylabel="mean error", legend=:bottomleft,
-     label=["forward 32 bit" "forward 64 bit" "central 32 bit" "central 64 bit"],
+     [errors32f, errors64f, errors32c, errors64c],
+     xlabel="ε", ylabel="mean error", legend=:bottomleft,
+     label=["one-sided 32 bit" "one-sided 64 bit" "central 32 bit" "central 64 bit"],
      background_color=:white, foreground_color=:black, ylims=[10^-9, 10^3])
 plot!(10.0 .^ LinRange(epsul[1], epsul[2], 1000), 10.0 .^ LinRange(epsul[1], epsul[2], 1000),
-      label="identity", color=:black, linestyle=:dash)
+      label="ε", color=:black, linestyle=:dash)
 plot!(10.0 .^ LinRange(epsul[1], epsul[2], 1000), (10.0 .^ LinRange(epsul[1], epsul[2], 1000)) .^ 2,
-      label="eps^2", color=:black)
+      label="ε^2", color=:black)
 plot!(xscale=:log10, yscale=:log10)
 
-vline!([eps(eltype(errorsx32f))^(1/2)], color=1, linestyle=:dash, label="")
-vline!([eps(eltype(errorsx64f))^(1/2)], color=2, linestyle=:dash, label="")
-vline!([eps(eltype(errorsx32c))^(1/3)], color=3, linestyle=:dash, label="")
-vline!([eps(eltype(errorsx64c))^(1/3)], color=4, linestyle=:dash, label="")
+vline!([eps(eltype(errors32f))^(1/2)], color=1, linestyle=:dash, label="")
+vline!([eps(eltype(errors64f))^(1/2)], color=2, linestyle=:dash, label="")
+vline!([eps(eltype(errors32c))^(1/3)], color=3, linestyle=:dash, label="")
+vline!([eps(eltype(errors64c))^(1/3)], color=4, linestyle=:dash, label="")
 
+savefig("./Plots/" * "Forward vs Central")
 
+errors32i = getErrorsFD(Himmelblau, grad_Himmelblau, complexGrad, xul, yul, Float32, epsul)
+errors64i = getErrorsFD(Himmelblau, grad_Himmelblau, complexGrad, xul, yul, Float64, epsul)
+errorAD32 = getErrorAD(Himmelblau, grad_Himmelblau, xul, yul, Float32)
+errorAD64 = getErrorAD(Himmelblau, grad_Himmelblau, xul, yul, Float64)
 
+plot(10.0 .^ LinRange(epsul[1], epsul[2], 1000), 
+     [errors32i, errors64i, errors32c, errors64c],
+     xlabel="ε", ylabel="mean error", legend=:bottomleft,
+     label=["complex 32 bit" "complex 64 bit" "central 32 bit" "central 64 bit"],
+     background_color=:white, foreground_color=:black, ylims=[10^-16, 10^3])
+plot!(xscale=:log10, yscale=:log10)
 
+hline!([errorAD32], color=:black, linestyle=:dash, label="automatic 32 bit")
+hline!([errorAD64], color=:black, label="automatic 64 bit")
 
-
-# a = [1.0, 2.0, -3.0]
-# b = [5.1, 3.9, 11.0]
-
-# x = convert.(Variable, a)
-# y = convert.(Variable, b)
-# z = Himmelblau(x, y)
-# backward!.(z)
-# print(grad.(x), grad.(y))
-# print("\n")
-# dx, dy = gradFD(Himmelblau, a, b)
-# print(dx, dy)
-# print("\n")
-# print(grad_Himmelblau(a, b))
+savefig("./Plots/" * "Complex vs Central")
