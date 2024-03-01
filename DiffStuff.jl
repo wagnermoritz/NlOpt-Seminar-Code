@@ -182,6 +182,7 @@ end
 
 module FiniteDiff
 
+# central finite differencing of a function f of two inputs x and y
 function centralGrad(f, x, y; epsilon=0.0)
 
     if epsilon==0.0
@@ -193,7 +194,7 @@ function centralGrad(f, x, y; epsilon=0.0)
     return gradsx, gradsy
 end
 
-
+# one sided forward finite differencing of a function f of two inputs x and y
 function forwardGrad(f, x, y; epsilon=0.0)
 
     if epsilon==0.0
@@ -212,6 +213,7 @@ end
 
 module ComplexStep
 
+# complex step method of a function f of two inputs x and y
 function complexGrad(f, x, y; epsilon=0.0)
 
     if epsilon==0.0

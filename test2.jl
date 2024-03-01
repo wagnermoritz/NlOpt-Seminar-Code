@@ -15,8 +15,10 @@ function grad_Himmelblau(x, y)
 end
 
 
+# compute the error of the gradient of the function f approximated by :get_grad:
+# compared to the exact gradient :grad_f:. The error is evaluated on a grid
+# with upper and lower bounds on x and y given in xul and yul.
 function getErrorsFD(f, grad_f, get_grad, xul, yul, arrType, epsul; resolution=100)
-
     xul = convert(Vector{arrType}, xul)
     yul = convert(Vector{arrType}, yul)
     x = LinRange(xul[1], xul[2], resolution)
@@ -38,7 +40,9 @@ function getErrorsFD(f, grad_f, get_grad, xul, yul, arrType, epsul; resolution=1
     return errors
 end
 
-
+# compute the error of the gradient of the function f computed by reverse AD
+# compared to the exact gradient :grad_f:. The error is evaluated on a grid
+# with upper and lower bounds on x and y given in xul and yul.
 function getErrorAD(f, grad_f, xul, yul, arrType; resolution=100)
 
     xul = convert(Vector{arrType}, xul)
@@ -63,8 +67,8 @@ function getErrorAD(f, grad_f, xul, yul, arrType; resolution=100)
 end
 
 
-xul = [-6.0, 6.0]# .- 0.270845
-yul = [-6.0, 6.0]# .- 0.923039
+xul = [-6.0, 6.0]
+yul = [-6.0, 6.0]
 epsul = [-16, 1]
 
 errors32f = getErrorsFD(Himmelblau, grad_Himmelblau, forwardGrad, xul, yul, Float32, epsul)
