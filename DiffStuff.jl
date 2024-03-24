@@ -1,3 +1,5 @@
+# A simple implementation of reverse mode automatic differentiation. Inputs w.r.t.
+# which a calculation should be differentiated have to be of type Variable.
 module ReverseAD
 
 # struct holding a value and all information needed for reverse AD
@@ -23,7 +25,7 @@ mutable struct Variable{T} <: Number
     end
 end
 
-# set all adjoints except the adjoint of x to zero
+# set all adjoints in the graph except the adjoint of x to zero
 function zero_adjoints!(x::Variable)
     for i in 1:length(x.parents)
         x.parents[i].adjoint = zero(x.parents[i].adjoint)
@@ -172,17 +174,17 @@ function ^(x::Variable, y::Integer)
     return z
 end
 
-
 convert(::Type{Variable}, x::Real) = Variable(x)
 
 export Variable, backward!, grad, +, -, *, /, ^, convert
-
 end
 
 
+# Simple implementations of one-sided and central finite differencing
+# of functions in two variables.
 module FiniteDiff
 
-# central finite differencing of a function f of two inputs x and y
+# central finite differencing of a functional f of two inputs x and y
 function centralGrad(f, x, y; epsilon=0.0)
 
     if epsilon==0.0
@@ -194,7 +196,7 @@ function centralGrad(f, x, y; epsilon=0.0)
     return gradsx, gradsy
 end
 
-# one sided forward finite differencing of a function f of two inputs x and y
+# one sided forward finite differencing of a functional f of two inputs x and y
 function forwardGrad(f, x, y; epsilon=0.0)
 
     if epsilon==0.0
@@ -207,13 +209,14 @@ function forwardGrad(f, x, y; epsilon=0.0)
 end
 
 export centralGrad, forwardGrad
-
 end
 
 
+# A simple implementations the complex step method for real
+# functions in two variables.
 module ComplexStep
 
-# complex step method of a function f of two inputs x and y
+# complex step method of a functional f of two inputs x and y
 function complexGrad(f, x, y; epsilon=0.0)
 
     if epsilon==0.0
@@ -228,5 +231,4 @@ function complexGrad(f, x, y; epsilon=0.0)
 end
 
 export complexGrad
-
 end
