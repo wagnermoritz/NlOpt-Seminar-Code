@@ -81,7 +81,7 @@ plot(10.0 .^ LinRange(epsul[1], epsul[2], 1000),
      [errors32f, errors64f, errors32c, errors64c],
      xlabel="ε", ylabel="mean error", legend=:bottomleft,
      label=["one-sided 32 bit" "one-sided 64 bit" "central 32 bit" "central 64 bit"],
-     background_color=:white, foreground_color=:black, ylims=[10^-9, 10^3])
+     background_color=:white, foreground_color=:black, ylims=[10^-9, 10^3], dpi=300)
 plot!(10.0 .^ LinRange(epsul[1], epsul[2], 1000), 10.0 .^ LinRange(epsul[1], epsul[2], 1000),
       label="ε", color=:black, linestyle=:dash)
 plot!(10.0 .^ LinRange(epsul[1], epsul[2], 1000), (10.0 .^ LinRange(epsul[1], epsul[2], 1000)) .^ 2,
@@ -106,7 +106,7 @@ plot(10.0 .^ LinRange(epsul[1], epsul[2], 1000),
      [errors32i, errors64i, errors32c, errors64c],
      xlabel="ε", ylabel="mean error", legend=:bottomleft,
      label=["complex 32 bit" "complex 64 bit" "central 32 bit" "central 64 bit"],
-     background_color=:white, foreground_color=:black, ylims=[10^-16, 10^3])
+     background_color=:white, foreground_color=:black, ylims=[10^-16, 10^3], dpi=300)
 plot!(xscale=:log10, yscale=:log10)
 
 # draw horizontal lines at the error values of 32- and 64-bit reverse mode AD
