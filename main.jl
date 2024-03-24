@@ -1,106 +1,116 @@
-using Images, Plots, Zygote, FiniteDifferences
-using LinearAlgebra, Random, Statistics, Printf
+using Images, Plots, Printf, LinearAlgebra
+include("./DiffStuff.jl")
+using .ReverseAD: Variable, backward!, grad, +, -, *, /, ^, convert
+using .FiniteDiff: centralGrad, forwardGrad
+using .ComplexStep: complexGrad
 
-function Rosenbrock(x, y; a=1, b=100)
-    return (a .- x) .^ 2 + b .* (y - x .^ 2) .^ 2
-end
 
 function Himmelblau(x, y)
     return (x .^ 2 + y .- 11) .^ 2 + (x + y .^ 2 .- 7) .^ 2
 end
 
-function plotFct(fct, xul, yul, resolution; save=false, filename="name.png")
-
-    x = LinRange(xul[1], xul[2], resolution)
-    x = repeat(x, 1, resolution)
-    y = LinRange(yul[1], yul[2], resolution)
-    y = repeat(y, 1, resolution)
-    result = fct(transpose(x), y)
-
-    z = ((2 .^ (1.0:0.01:4.0)) .- 2) .^ 3
-    heatmap(result, color=cgrad(:haline, z, scale=exp),
-            xticks=([1, 250, 500, 750, 1000],
-                    convert(Array{Int64}, LinRange(xul[1], xul[2], 5))),
-            yticks=([1, 250, 500, 750, 1000],
-                    convert(Array{Int64}, LinRange(yul[1], yul[2], 5))),
-            aspect_ratio=:equal, size=(500, 500),
-            background_color = :transparent, foreground_color=:black)
-
-    if save
-        savefig("C:/Users/mo_-_/TorchProjects/NlOptJulia/Plots/" * filename)
-    end
-end
-
-function gradFD(f, x, y)
-    epsilon = sqrt(eps(eltype(x)))
-    gradsx = zero(x)
-    gradsy = zero(y)
-    gradsx .= (f(x .+ epsilon, y) - f(x .- epsilon, y)) / (2 * epsilon)
-    gradsy .= (f(x, y .+ epsilon) - f(x, y .- epsilon)) / (2 * epsilon)
-    return (gradsx, gradsy)
-end
-
-function gradAD(f, x, y)
-    return gradient((x, y) -> sum(f(x, y)), x, y)
-end
-
-function gradientDescent(f, getGrad1, getGrad2, x, y; steps=2000, lr=0.01)
-
-    x1 = deepcopy(x)
-    x2 = deepcopy(x)
-    y1 = deepcopy(y)
-    y2 = deepcopy(y)
-    meanErrNorm = []
-
-    for t = 1:steps
-        σ = lr / sqrt(t)
-
-        grad1 = getGrad1(f, x1, y1)
-        x1 -= σ .* grad1[1]
-        y1 -= σ .* grad1[2]
-
-        grad2 = getGrad2(f, x2, y2)
-        x2 -= σ .* grad2[1]
-        y2 -= σ .* grad2[2]
-        push!(meanErrNorm, mean(f(x1, y1) - f(x2, y2)) ^ 2)
-    end
-
-    return meanErrNorm, sum(sqrt.((x1 - x2) .^ 2 + (y1 - y2) .^ 2) .> 2)
+function grad_Himmelblau(x, y)
+    return 2 * (-7 .+ x + y .^ 2 + 2 * x .* (-11 .+ x .^ 2 + y)),
+           2 * (-11 .+ x .^ 2 + y + 2 * y .* (-7 .+ x + y .^ 2))
 end
 
 
-#plotFct(Himmelblau, (-6.0, 6.0), (-6.0, 6.0), 1000,
-#        save=false, filename="himmelblau.png")
-#plotFct(Rosenbrock, (-2.0, 2.0), (-1.0, 3.0), 1000,
-#        save=false, filename="rosenbrock.png")
-
-function getErrors(f, xul, yul, arrType; resolution=100)
+# compute the error of the gradient of the function f approximated by :get_grad:
+# compared to the exact gradient :grad_f:. The error is evaluated on a grid
+# with upper and lower bounds on x and y given in :xul: and :yul:.
+function getErrorsFD(f, grad_f, get_grad, xul, yul, arrType, epsul; resolution=100)
     xul = convert(Vector{arrType}, xul)
     yul = convert(Vector{arrType}, yul)
-
     x = LinRange(xul[1], xul[2], resolution)
     x = transpose(repeat(x, 1, resolution))[:]
     y = LinRange(yul[1], yul[2], resolution)
     y = repeat(y, 1, resolution)[:]
 
-    return gradientDescent(Himmelblau, gradAD, gradFD, x, y)
+    epsrange = convert(Vector{arrType}, 10.0 .^ LinRange(epsul[1], epsul[2], 1000))
+    errors = arrType[]
+
+    for eps in epsrange
+        dx, dy = get_grad(f, x, y; epsilon=eps)
+        true_dx, true_dy = grad_f(x, y)
+        distx = abs.(dx - true_dx)
+        disty = abs.(dy - true_dy)
+        push!(errors, (sum(distx) + sum(disty)) / (2 * resolution ^ 2))
+    end
+
+    return errors
 end
 
-xul = [-2.0, 2.0]# .- 0.270845
-yul = [-1.0, 3.0]# .- 0.923039
+# compute the error of the gradient of the function f computed by reverse AD
+# compared to the exact gradient :grad_f:. The error is evaluated on a grid
+# with upper and lower bounds on x and y given in :xul: and :yul:.
+function getErrorAD(f, grad_f, xul, yul, arrType; resolution=100)
 
-errors16, wrongMin16 = getErrors(Rosenbrock, xul, yul, Float16)
-errors32, wrongMin32 = getErrors(Rosenbrock, xul, yul, Float32)
-errors64, wrongMin64 = getErrors(Rosenbrock, xul, yul, Float64)
+    xul = convert(Vector{arrType}, xul)
+    yul = convert(Vector{arrType}, yul)
+    x = LinRange(xul[1], xul[2], resolution)
+    x = transpose(repeat(x, 1, resolution))[:]
+    y = LinRange(yul[1], yul[2], resolution)
+    y = repeat(y, 1, resolution)[:]
 
-print(wrongMin16, ", ", wrongMin32, ", ", wrongMin64)
+    true_dx, true_dy = grad_f(x, y)
 
-plot(range(1, 2000, length=2000), [errors16, errors32, errors64],
-    xlabel="Iteration", ylabel="Mean distance", ylims=(1e-30, 1.0),
-    legend=:topright, label=["16 bit float" "32 bit float" "64 bit float"],
-    background_color = :transparent, foreground_color=:black)
-plot!(yscale=:log10)
-hline!([maximum(errors16), maximum(errors32), maximum(errors64)],
-      color=:gray, linestyle=:dash, label="")
+    x = convert.(Variable, x)
+    y = convert.(Variable, y)
+    res = f(x, y)
+    backward!.(res)
+    dx = grad.(x)
+    dy = grad.(y)
+    distx = abs.(dx - true_dx)
+    disty = abs.(dy - true_dy)
 
-savefig("C:/Users/mo_-_/TorchProjects/NlOptJulia/Plots/" * "RosenbrockDist")
+    return (sum(distx) + sum(disty)) / (2 * resolution ^ 2)
+end
+
+# upper and lower bounds for the x and y coordinates and epsilon
+xul = [-6.0, 6.0]
+yul = [-6.0, 6.0]
+epsul = [-16, 1]
+
+errors32f = getErrorsFD(Himmelblau, grad_Himmelblau, forwardGrad, xul, yul, Float32, epsul)
+errors64f = getErrorsFD(Himmelblau, grad_Himmelblau, forwardGrad, xul, yul, Float64, epsul)
+errors32c = getErrorsFD(Himmelblau, grad_Himmelblau, centralGrad, xul, yul, Float32, epsul)
+errors64c = getErrorsFD(Himmelblau, grad_Himmelblau, centralGrad, xul, yul, Float64, epsul)
+
+# plot the errors of 32- and 64-bit one-sided and central finite differencing
+plot(10.0 .^ LinRange(epsul[1], epsul[2], 1000), 
+     [errors32f, errors64f, errors32c, errors64c],
+     xlabel="ε", ylabel="mean error", legend=:bottomleft,
+     label=["one-sided 32 bit" "one-sided 64 bit" "central 32 bit" "central 64 bit"],
+     background_color=:white, foreground_color=:black, ylims=[10^-9, 10^3])
+plot!(10.0 .^ LinRange(epsul[1], epsul[2], 1000), 10.0 .^ LinRange(epsul[1], epsul[2], 1000),
+      label="ε", color=:black, linestyle=:dash)
+plot!(10.0 .^ LinRange(epsul[1], epsul[2], 1000), (10.0 .^ LinRange(epsul[1], epsul[2], 1000)) .^ 2,
+      label="ε^2", color=:black)
+plot!(xscale=:log10, yscale=:log10)
+
+# draw vertical lines at the approximated optimal epsilon values
+vline!([eps(eltype(errors32f))^(1/2)], color=1, linestyle=:dash, label="")
+vline!([eps(eltype(errors64f))^(1/2)], color=2, linestyle=:dash, label="")
+vline!([eps(eltype(errors32c))^(1/3)], color=3, linestyle=:dash, label="")
+vline!([eps(eltype(errors64c))^(1/3)], color=4, linestyle=:dash, label="")
+
+savefig("./Plots/" * "Forward vs Central")
+
+errors32i = getErrorsFD(Himmelblau, grad_Himmelblau, complexGrad, xul, yul, Float32, epsul)
+errors64i = getErrorsFD(Himmelblau, grad_Himmelblau, complexGrad, xul, yul, Float64, epsul)
+errorAD32 = getErrorAD(Himmelblau, grad_Himmelblau, xul, yul, Float32)
+errorAD64 = getErrorAD(Himmelblau, grad_Himmelblau, xul, yul, Float64)
+
+# plot the errors of 32- and 64-bit complex step method and central finite differencing
+plot(10.0 .^ LinRange(epsul[1], epsul[2], 1000), 
+     [errors32i, errors64i, errors32c, errors64c],
+     xlabel="ε", ylabel="mean error", legend=:bottomleft,
+     label=["complex 32 bit" "complex 64 bit" "central 32 bit" "central 64 bit"],
+     background_color=:white, foreground_color=:black, ylims=[10^-16, 10^3])
+plot!(xscale=:log10, yscale=:log10)
+
+# draw horizontal lines at the error values of 32- and 64-bit reverse mode AD
+hline!([errorAD32], color=:black, linestyle=:dash, label="automatic 32 bit")
+hline!([errorAD64], color=:black, label="automatic 64 bit")
+
+savefig("./Plots/" * "Complex vs Central")
